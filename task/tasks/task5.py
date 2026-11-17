@@ -13,7 +13,7 @@ employee="""
     7,suresh,it,68000,chennai
     8,anitha,hr,48000,mumbai"""
     
-with open("employee1.csv","w")as f:
+with open("employee1.csv","w") as f:
     f.write(employee)
 employee=pd.read_csv('employee1.csv')
 print(employee.head())
