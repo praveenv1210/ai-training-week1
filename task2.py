@@ -1,232 +1,246 @@
-import csv
-import json
-import logging
-from pathlib import Path
-from typing import List, Optional, Union
 
-import fitz
-from openpyxl import Workbook, load_workbook
+# ==========================================
+# TASK 2: PREPROCESSING, FEATURES AND PIPELINE
+# ==========================================
+
+import pandas as pd
+import numpy as np
+
+# Load dataset
+df = pd.read_csv("bank_loan_dataset.csv")
+
+# Display dataset information
+print("\nDATASET INFORMATION")
+print(df.head())
+
+print("\nDATASET SHAPE:")
+print(df.shape)
+
+print("\nCOLUMN INFORMATION:")
+print(df.info())
+
+print("\nMISSING VALUES:")
+print(df.isnull().sum())
+
+print("\nDATA TYPES:")
+print(df.dtypes)
+
+print(df.info())
 
 
-BASE_DIR = Path(__file__).parent
+# TASK 2 - STEP 1: Check Missing Values
 
-CSV_FILE = BASE_DIR / "employees.csv"
-JSON_FILE = BASE_DIR / "employees.json"
-HIGH_EARNERS_FILE = BASE_DIR / "high_earners.csv"
-EXCEL_FILE = BASE_DIR / "salary.xlsx"
-PDF_FILE = BASE_DIR / "sample.pdf"
+print("\nMISSING VALUES")
+print(df.isnull().sum())
+
+print("\nDUPLICATE ROWS")
+print(df.duplicated().sum())
+
+# Separate features and target
+X = df.drop("default", axis=1)
+y = df["default"]
+
+print("\nFEATURE SHAPE:", X.shape)
+print("TARGET SHAPE:", y.shape)
 
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s - %(message)s"
+# TASK 2 - STEP 2: Identify Column Types
+
+from sklearn.impute import SimpleImputer, KNNImputer
+from sklearn.preprocessing import (
+    OneHotEncoder,
+    OrdinalEncoder,
+    StandardScaler
+)
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+
+# Identify numerical and categorical columns
+numeric_columns = X.select_dtypes(
+    include=["int64", "float64"]
+).columns.tolist()
+
+categorical_columns = X.select_dtypes(
+    include=["object", "category"]
+).columns.tolist()
+
+print("\nNUMERIC COLUMNS:")
+print(numeric_columns)
+
+print("\nCATEGORICAL COLUMNS:")
+print(categorical_columns)
+
+
+# TASK 2 - STEP 3: Preprocessing Pipelines
+
+from sklearn.impute import SimpleImputer, KNNImputer
+from sklearn.preprocessing import StandardScaler
+
+# Numerical preprocessing using SimpleImputer
+numeric_pipeline = Pipeline(steps=[
+    ("imputer", SimpleImputer(strategy="median")),
+    ("scaler", StandardScaler())
+])
+
+# Numerical preprocessing using KNNImputer
+knn_pipeline = Pipeline(steps=[
+    ("imputer", KNNImputer(n_neighbors=5)),
+    ("scaler", StandardScaler())
+])
+
+# Test both imputers
+simple_result = numeric_pipeline.fit_transform(X)
+knn_result = knn_pipeline.fit_transform(X)
+
+print("\nSIMPLE IMPUTER RESULT:", simple_result.shape)
+print("KNN IMPUTER RESULT:", knn_result.shape)
+
+print("\nPREPROCESSING COMPLETED")
+
+
+# TASK 2 - STEP 4: FEATURE ENGINEERING
+
+import numpy as np
+
+# 1. Income to loan ratio
+X["income_loan_ratio"] = (
+    X["income"] / (X["loan_amount"] + 1)
 )
 
-logger = logging.getLogger(__name__)
+# 2. Log transformation of loan amount
+X["log_loan_amount"] = np.log1p(X["loan_amount"])
 
+# 3. Debt to income ratio
+X["debt_income_ratio"] = (
+    X["existing_debt"] / (X["income"] + 1)
+)
 
+print("\nFEATURE ENGINEERING RESULTS")
 
-def normalize_salary(salary: Union[int, str]) -> int:
+print(X[[
+    "income_loan_ratio",
+    "log_loan_amount",
+    "debt_income_ratio"
+]].head())
 
-    return int(salary)
+print("\nNEW FEATURE SHAPE:", X.shape)
 
 
+# TASK 2 - STEP 5: Train-Test Split
 
-def read_employees(path: Union[str, Path]) -> List[dict]:
+from sklearn.model_selection import train_test_split
 
-    employees = []
+# Split dataset into training and testing data
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.20,
+    random_state=42,
+    stratify=y
+)
 
-    with open(path, "r", newline="", encoding="utf-8") as file:
+print("\nTRAINING DATA SHAPE:", X_train.shape)
+print("TESTING DATA SHAPE:", X_test.shape)
+print("TRAINING TARGET SHAPE:", y_train.shape)
+print("TESTING TARGET SHAPE:", y_test.shape)
 
-        reader = csv.DictReader(file)
 
-        for row in reader:
+# TASK 2 - STEP 6: Model Training
 
-            employee = {
-                "name": row["name"],
-                "department": row["department"],
-                "salary": normalize_salary(row["salary"])
-            }
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
 
-            employees.append(employee)
+# Create machine learning pipeline
+model = Pipeline([
+    ("imputer", SimpleImputer(strategy="median")),
+    ("scaler", StandardScaler()),
+    ("classifier", LogisticRegression(max_iter=1000))
+])
 
-    return employees
+# Train the model
+model.fit(X_train, y_train)
 
+print("\nMODEL TRAINING COMPLETED")
 
 
-def write_json(
-    employees: List[dict],
-    path: Union[str, Path]
-) -> None:
+# TASK 2 - STEP 7: Model Evaluation
 
-    with open(path, "w", encoding="utf-8") as file:
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    classification_report
+)
 
-        json.dump(employees, file, indent=4)
+# Predict test data
+y_pred = model.predict(X_test)
 
+# Calculate accuracy
+accuracy = accuracy_score(y_test, y_pred)
 
+print("\nMODEL ACCURACY:", accuracy)
 
-def write_high_earners(
-    employees: List[dict],
-    path: Union[str, Path]
-) -> int:
+# Confusion matrix
+print("\nCONFUSION MATRIX:")
+print(confusion_matrix(y_test, y_pred))
 
-    high_earners = [
-        emp for emp in employees
-        if emp["salary"] > 50000
-    ]
+# Classification report
+print("\nCLASSIFICATION REPORT:")
+print(classification_report(y_test, y_pred))
 
-    with open(path, "w", newline="", encoding="utf-8") as file:
 
-        fieldnames = ["name", "department", "salary"]
+# TASK 2 - STEP 8: RANDOM FOREST MODEL
 
-        writer = csv.DictWriter(
-            file,
-            fieldnames=fieldnames
-        )
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+from sklearn.metrics import accuracy_score
 
-        writer.writeheader()
-        writer.writerows(high_earners)
+# Create Random Forest pipeline
+rf_model = Pipeline([
+    ("imputer", SimpleImputer(strategy="median")),
+    ("classifier", RandomForestClassifier(
+        n_estimators=100,
+        random_state=42
+    ))
+])
 
-    return len(high_earners)
+# Train Random Forest
+rf_model.fit(X_train, y_train)
 
+# Predict test data
+rf_pred = rf_model.predict(X_test)
 
+# Calculate accuracy
+rf_accuracy = accuracy_score(y_test, rf_pred)
 
-def create_excel(
-    employees: List[dict],
-    path: Union[str, Path]
-) -> None:
+print("\nRANDOM FOREST RESULTS")
+print("Accuracy:", rf_accuracy)
 
-    workbook = Workbook()
+print("\nMODEL COMPARISON")
+print("Logistic Regression:", accuracy)
+print("Random Forest:", rf_accuracy)
 
-    sheet = workbook.active
-    sheet.title = "Employee Salaries"
 
-    sheet.append(["Name", "Department", "Salary"])
+# TASK 2 - STEP 9: SAVE BEST MODEL
 
-    for emp in employees:
+import pickle
 
-        sheet.append([
-            emp["name"],
-            emp["department"],
-            emp["salary"]
-        ])
+# Save Random Forest model
+with open("best_bank_loan_model.pkl", "wb") as file:
+    pickle.dump(rf_model, file)
 
-    workbook.save(path)
+print("\nMODEL SAVED SUCCESSFULLY")
 
+# Load saved model
+with open("best_bank_loan_model.pkl", "rb") as file:
+    loaded_model = pickle.load(file)
 
+print("MODEL LOADED SUCCESSFULLY")
 
-def read_excel(path: Union[str, Path]) -> int:
+# Test loaded model
+loaded_predictions = loaded_model.predict(X_test)
 
-    workbook = load_workbook(path)
-
-    sheet = workbook.active
-
-    row_count = sheet.max_row - 1
-
-    workbook.close()
-
-    return row_count
-
-
-
-def extract_pdf_text(path: Union[str, Path]) -> str:
-
-    with fitz.open(path) as document:
-
-        if len(document) == 0:
-            return ""
-
-        page = document[0]
-
-        text = page.get_text()
-
-        return text[:100]
-
-
-def read_file(
-    path: Union[str, Path]
-) -> Optional[Union[dict, list]]:
-
-    file_path = Path(path)
-
-    try:
-
-        with open(file_path, "r", encoding="utf-8") as file:
-
-            return json.load(file)
-
-    except FileNotFoundError:
-
-        logger.error("File not found: %s", file_path.name)
-
-    except json.JSONDecodeError:
-
-        logger.error("Invalid JSON format: %s", file_path.name)
-
-    return None
-
-
-def find_employee(
-    name: str,
-    employees: List[dict]
-) -> Optional[dict]:
-
-    for emp in employees:
-
-        if emp["name"].lower() == name.lower():
-
-            return emp
-
-    return None
-
-
-def main() -> None:
-
-    employees = read_employees(CSV_FILE)
-
-    print(f"Rows read: {len(employees)}")
-
-    write_json(employees, JSON_FILE)
-
-    json_data = read_file(JSON_FILE)
-
-    high_count = write_high_earners(
-        employees,
-        HIGH_EARNERS_FILE
-    )
-
-    print(f"High earners written: {high_count}")
-
-    create_excel(employees, EXCEL_FILE)
-
-    excel_rows = read_excel(EXCEL_FILE)
-
-    print(
-        f"salary.xlsx created and read back: {excel_rows} rows"
-    )
-
-    if PDF_FILE.exists():
-
-        pdf_text = extract_pdf_text(PDF_FILE)
-
-        print("PDF first 100 characters:")
-        print(pdf_text)
-
-    else:
-
-        logger.warning("PDF not found: %s", PDF_FILE.name)
-
-    read_file(BASE_DIR / "missing.txt")
-
-
-    result = find_employee("Divya", employees)
-
-    if result:
-        print("Employee found:", result)
-
-
-
-if __name__ == "__main__":
-
-    main()
-
+print("LOADED MODEL ACCURACY:",
+      accuracy_score(y_test, loaded_predictions))
